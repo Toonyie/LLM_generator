@@ -1,19 +1,21 @@
+#on bash, type:
+#pip install google-genai
+#setx GEMINI_API_KEY "AIzaSyBNm4UB7zHim_7Kp9bb62WdD8TKzj0VQQ8"
+#python generator.py
+
+
 import os
 from google import genai
 
-# The genai.Client() automatically looks for the GEMINI_API_KEY 
-# or GOOGLE_API_KEY environment variable.
-try:
-    client = genai.Client()
+API_KEY = "AIzaSyBNm4UB7zHim_7Kp9bb62WdD8TKzj0VQQ8"
+client = genai.Client(api_key=API_KEY)
 
-    # Call the generate_content method with a model and your prompt
-    response = client.models.generate_content(
-        model="gemini-2.5-flash", 
-        contents="Explain how AI works in a few words"
+#Function that types a prompt to the gemini llm
+def llm_call(prompt: str) -> str:
+    resp = client.models.generate_content(
+        model="gemini-2.5-flash",   # or another Gemini model you have access to
+        contents=prompt
     )
+    return resp.text
 
-    print(response.text)
-
-except Exception as e:
-    print(f"An error occurred: {e}")
-    print("Please ensure your GEMINI_API_KEY environment variable is set correctly.")
+print(llm_call("Say hello in one sentence."))
