@@ -1,0 +1,9 @@
+YES = kernel32.dll | CreateFileA | ans=kernel32.dll
+YES = kernel32.dll | ReadFile | ans=kernel32.dll
+YES = kernel32.dll | CloseHandle | ans=kernel32.dll
+YES = user32.dll | MessageBoxA | ans=user32.dll
+YES = advapi32.dll | RegOpenKeyExA | ans=advapi32.dll
+YES = advapi32.dll | RegSetValueExA | ans=advapi32.dll
+YES = wininet.dll | InternetOpenA | ans=wininet.dll
+YES = ws2_32.dll | socket | ans=ws2_32.dll
+YES = psapi.dll | EnumProcesses | ans=psapi.dll

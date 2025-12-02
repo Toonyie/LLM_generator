@@ -1,0 +1,9 @@
+kernel32.dll CreateFileA
+kernel32.dll ReadFile
+kernel32.dll CloseHandle
+user32.dll MessageBoxA
+advapi32.dll RegOpenKeyExA
+advapi32.dll RegSetValueExA
+wininet.dll InternetOpenA
+ws2_32.dll socket
+psapi.dll EnumProcesses
