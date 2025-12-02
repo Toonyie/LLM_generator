@@ -9,3 +9,9 @@ Install the official Google GenAI SDK for Python:
 
 ```bash
 pip install google-genai
+```
+### System requirements
+- Windows
+- One of:
+  - MinGW-w64 (gcc in PATH), or
+  - Visual Studio Build Tools (cl.exe in Dev Prompt)
