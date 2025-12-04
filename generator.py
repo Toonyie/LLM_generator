@@ -23,15 +23,26 @@ PRELUDE = r"""
 #include <intrin.h>
 """
 NUM_VARIANTS = 5
-MAX_TRIES = 6
+MAX_TRIES = 5
 BLOCKS_DIR = "blocks" #where variants go
 OUTPUT_DIR = "generated_samples" #where combined samples go
 GOOD_BLOCKS_DIR = "blocks_out"   #where "best compilable" single blocks go
 
 
 #Replace API_KEY with another gemini key if you wish
-API_KEY = "AIzaSyBNm4UB7zHim_7Kp9bb62WdD8TKzj0VQQ8"
-client = genai.Client(api_key=API_KEY)
+try:
+    client = genai.Client()
+except Exception as e:
+    # Check if a specific key not found error is raised, though a generic catch is often safer
+    # for client initialization in case the library changes its specific error type.
+    if "api_key" in str(e).lower():
+        print("ERROR: The Gemini API key was not found. Please set the GEMINI_API_KEY environment variable.")
+        print("For example, in Bash/Linux/macOS: export GEMINI_API_KEY='Your_API_Key_Here'")
+        print("On Windows (CMD): set GEMINI_API_KEY=Your_API_Key_Here")
+        print("On Windows (PowerShell): $env:GEMINI_API_KEY='Your_API_Key_Here'")
+        exit(1)
+    else:
+        raise e
 
 #Cleanup code
 def clean_code(text: str) -> str:
@@ -55,9 +66,6 @@ def llm_call(prompt: str) -> str:
         contents=prompt
     )   
     return resp.text or ""
-
-#Test Prompt
-print(llm_call("Say hello in one sentence."))
 
 BLOCK_PROMPTS = {
     "cpu_vendor": r"""
