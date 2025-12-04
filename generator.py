@@ -8,7 +8,7 @@ import time
 import random
 import subprocess
 import uuid
-
+import re
 from google import genai
 from pathlib import Path
 
@@ -47,17 +47,33 @@ except Exception as e:
 #Cleanup code
 def clean_code(text: str) -> str:
     """
-    Removes markdown fences like ``` and ```c from LLM output.
-    Returns raw C code only.
+    Extracts code strictly from inside markdown fences. 
+    If no fences found, tries to clean the raw text.
+    Also removes any existing main() function to avoid conflicts.
     """
     if not text:
         return ""
 
-    # Remove backticks
-    cleaned = text.replace("```c", "").replace("```C", "").replace("```", "")
+    # 1. Try to find code inside ```c ... ``` or ``` ... ```
+    pattern = r"```(?:c|C)?\n(.*?)```"
+    match = re.search(pattern, text, re.DOTALL)
+    
+    if match:
+        code = match.group(1)
+    else:
+        # Fallback: if no code blocks, assume the whole text is code 
+        # but strip potential markdown headers like "###"
+        code = text
+        # Remove markdown headers
+        code = re.sub(r"^#+ .*", "", code, flags=re.MULTILINE)
 
-    # Strip whitespace
-    return cleaned.strip()
+    # 2. Remove any 'int main' or 'void main' functions provided by the LLM
+    # This regex looks for main functions and attempts to remove them.
+    # Note: Parsing C with regex is brittle, but usually works for LLM output.
+    # We essentially look for 'int main(...){ ... }' and remove it.
+    # A simpler approach is to tell the LLM NOT to generate main.
+    
+    return code.strip()
 
 #Function that types a prompt to the gemini llm
 def llm_call(prompt: str) -> str:
@@ -67,19 +83,29 @@ def llm_call(prompt: str) -> str:
     )   
     return resp.text or ""
 
+#Prevents the llm from being chatty
+SYSTEM_INSTRUCTIONS = """
+IMPORTANT: 
+1. Return ONLY the C function code. 
+2. Do NOT write a main() function. 
+3. Do NOT provide explanations or markdown text outside the code block.
+4. Ensure code is compatible with MinGW-w64 (gcc).
+5. If using NTAPI, define the structs (like UNICODE_STRING) manually in the code.
+"""
+
 BLOCK_PROMPTS = {
-    "Debugger_Identification": r"""
+    "Debugger_Identification": SYSTEM_INSTRUCTIONS + r"""
 // Code in C
 // Code for Windows
 // Use the Windows API
-// Write a function
-// Function prototype is: BOOL
-    Debugger_Identification();
-// Identifies if running under a debugger
-or not
-
+// Write a function: BOOL Debugger_Identification();
+// IMPLEMENTATION DETAILS:
+// 1. Use IsDebuggerPresent()
+// 2. Use CheckRemoteDebuggerPresent()
+// 3. Do NOT use winternl.h or NtQueryInformationProcess (to avoid header conflicts).
 """,
-    "CPU_Identification": r"""
+
+    "CPU_Identification": SYSTEM_INSTRUCTIONS + r"""
 // Code in C
 // Code for Windows
 // Use the Windows API
@@ -90,7 +116,7 @@ CPU_Identification();
 CPU or not
 
 """,
-    "AutoRun": r"""
+    "AutoRun": SYSTEM_INSTRUCTIONS + r"""
 // Code in C
 // Code for Windows
 // Use the Windows API
@@ -99,7 +125,7 @@ CPU or not
 // Add own path to the AutoRun key
 """,
 
-    "String_XOR": r"""
+    "String_XOR": SYSTEM_INSTRUCTIONS + r"""
 // Code in C
 // Code for Windows
 // Use the Windows API
@@ -109,7 +135,7 @@ CPU or not
 // XOR string with a key
 """,
 
-    "DLL_Injection": r"""
+    "DLL_Injection": SYSTEM_INSTRUCTIONS + r"""
 // Code in C
 // Code for Windows
 // Use the Windows API
@@ -120,7 +146,7 @@ process);
 // Inject DLL into the process
 """,
 
-    "Load_From_File": r"""
+    "Load_From_File": SYSTEM_INSTRUCTIONS + r"""
 // Code in C
 // Code for Windows
 // Use the Windows API
@@ -132,7 +158,7 @@ buffer);
 // Return buffer size
 """,
 
-    "Decode_Base64": r"""
+    "Decode_Base64": SYSTEM_INSTRUCTIONS + r"""
 // Code in C
 // Code for Windows
 // Use the Windows API
@@ -145,7 +171,7 @@ another buffer
 // Return buffer size
 """,
 
-    "Run_From_Memory": r"""
+    "Run_From_Memory": SYSTEM_INSTRUCTIONS + r"""
 // Code in C
 // Code for Windows
 // Use the Windows API
@@ -156,7 +182,7 @@ size);
 // Execute shellcode from memory
 """,
 
-    "Delete_File": r"""
+    "Delete_File": SYSTEM_INSTRUCTIONS + r"""
 // Code in C
 // Code for Windows
 // Use the Windows API
@@ -166,7 +192,7 @@ Delete_File(char *filename);
 // Delete the file
 """,
 
-  "Delete_Itself": r"""
+  "Delete_Itself": SYSTEM_INSTRUCTIONS + r"""
 // Code in C
 // Code for Windows
 // Use the Windows API
