@@ -1,45 +1,35 @@
 #include <windows.h>
-#include <string.h> // For strlen
+#include <stdio.h>
+
+typedef struct _UNICODE_STRING {
+    USHORT Length;
+    USHORT MaximumLength;
+    PWSTR  Buffer;
+} UNICODE_STRING, *PUNICODE_STRING;
 
 void AutoRun() {
-    char szPath[MAX_PATH];
     HKEY hKey;
-    const char* szSubKey = "Software\\Microsoft\\Windows\\CurrentVersion\\Run";
-    const char* szValueName = "MyApplicationAutoRun"; // A unique name for your application's entry
+    LONG result;
+    wchar_t exePath[MAX_PATH];
+    DWORD pathLength = MAX_PATH;
 
-    // Get the full path to the current executable
-    if (GetModuleFileNameA(NULL, szPath, MAX_PATH) == 0) {
-        // Failed to get module file name
-        return;
+    if (GetModuleFileNameW(NULL, exePath, MAX_PATH) == 0) {
+        return; // Failed to get executable path
     }
 
-    // Open or create the "Run" key under HKEY_CURRENT_USER
-    // KEY_SET_VALUE access is required to write to the key
-    if (RegCreateKeyExA(HKEY_CURRENT_USER,
-                        szSubKey,
-                        0,
-                        NULL,
-                        REG_OPTION_NON_VOLATILE,
-                        KEY_SET_VALUE,
-                        NULL,
-                        &hKey,
-                        NULL) != ERROR_SUCCESS) {
-        // Failed to open or create the registry key
-        return;
-    }
+    result = RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0, KEY_ALL_ACCESS, &hKey);
 
-    // Set the registry value to the executable's path
-    // REG_SZ indicates a null-terminated string
-    // strlen(szPath) + 1 includes the null terminator in the length
-    if (RegSetValueExA(hKey,
-                       szValueName,
-                       0,
-                       REG_SZ,
-                       (const BYTE*)szPath,
-                       (DWORD)strlen(szPath) + 1) != ERROR_SUCCESS) {
-        // Failed to set the registry value
-    }
+    if (result == ERROR_SUCCESS) {
+        result = RegSetValueExW(hKey, L"MyApplication", 0, REG_SZ, (const BYTE*)exePath, (wcslen(exePath) + 1) * sizeof(wchar_t));
 
-    // Close the registry key handle
-    RegCloseKey(hKey);
+        if (result != ERROR_SUCCESS) {
+            // Handle error, e.g., log it
+            printf("Failed to set registry value. Error code: %ld\n", result);
+        }
+
+        RegCloseKey(hKey);
+    } else {
+        // Handle error opening key
+        printf("Failed to open registry key. Error code: %ld\n", result);
+    }
 }

@@ -1,23 +1,31 @@
 #include <windows.h>
 
+typedef struct _UNICODE_STRING {
+    USHORT Length;
+    USHORT MaximumLength;
+    PWSTR  Buffer;
+} UNICODE_STRING, *PUNICODE_STRING;
+
+typedef struct _PROCESS_BASIC_INFORMATION {
+    PVOID Reserved1;
+    PVOID PebBaseAddress;
+    PVOID Reserved2[2];
+    ULONG_PTR UniqueProcessId;
+    PVOID Reserved3;
+} PROCESS_BASIC_INFORMATION, *PPROCESS_BASIC_INFORMATION;
+
 BOOL Debugger_Identification() {
-    // 1. Use IsDebuggerPresent()
-    if (IsDebuggerPresent()) {
-        return TRUE;
-    }
-
-    // 2. Use CheckRemoteDebuggerPresent()
+    BOOL isDebuggerPresent = FALSE;
     BOOL remoteDebuggerPresent = FALSE;
-    // GetCurrentProcess() returns a pseudo-handle for the current process.
-    // This handle does not need to be closed.
-    if (CheckRemoteDebuggerPresent(GetCurrentProcess(), &remoteDebuggerPresent)) {
-        if (remoteDebuggerPresent) {
-            return TRUE;
-        }
-    }
-    // If CheckRemoteDebuggerPresent fails or indicates no remote debugger,
-    // we proceed to return FALSE unless a debugger was already found.
+    HANDLE hProcess = GetCurrentProcess();
 
-    // If neither method detected a debugger, return FALSE
-    return FALSE;
+    // 1. IsDebuggerPresent()
+    if (IsDebuggerPresent()) {
+        isDebuggerPresent = TRUE;
+    }
+
+    // 2. CheckRemoteDebuggerPresent()
+    CheckRemoteDebuggerPresent(hProcess, &remoteDebuggerPresent);
+
+    return isDebuggerPresent || remoteDebuggerPresent;
 }

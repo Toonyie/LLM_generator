@@ -5,11 +5,11 @@ import os
 import subprocess
 import tempfile
 import time
+import sys
 import random
 import subprocess
 import uuid
 import re
-from google import genai
 from pathlib import Path
 
 CC = "gcc"
@@ -27,9 +27,44 @@ MAX_TRIES = 5
 BLOCKS_DIR = "blocks" #where variants go
 OUTPUT_DIR = "generated_samples" #where combined samples go
 GOOD_BLOCKS_DIR = "blocks_out"   #where "best compilable" single blocks go
+NUM_SAMPLES = 5 # Number of combined samples
+# --- ONE-CLICK SETUP UTILS ---
+def install_package(package):
+    print(f"[*] Installing required package: {package}...")
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+        print(f"[+] {package} installed successfully.")
+    except subprocess.CalledProcessError:
+        print(f"[!] Failed to install {package}. Please install it manually.")
+        sys.exit(1)
 
+def check_compiler():
+    print("[*] Checking for GCC compiler...")
+    try:
+        subprocess.run([CC, "--version"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print("[+] GCC is available.")
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        print("[!] GCC (MinGW) not found in PATH.")
+        print("    Please install MinGW-w64 to compile the generated C code.")
+        sys.exit(1)
 
-#Replace API_KEY with another gemini key if you wish
+#Setup Execution
+check_compiler()
+try:
+    from google import genai
+except ImportError:
+    install_package("google-genai")
+    from google import genai
+    
+if "GEMINI_API_KEY" not in os.environ:
+    print("\n[?] GEMINI_API_KEY not found in environment variables.")
+    key = input("    Please enter your Gemini API Key: ").strip()
+    if not key:
+        print("[!] API Key is required. Exiting.")
+        sys.exit(1)
+    os.environ["GEMINI_API_KEY"] = key    
+
+#Replace API_KEY with another gemini key if you 
 try:
     client = genai.Client()
 except Exception as e:
@@ -46,42 +81,28 @@ except Exception as e:
 
 #Cleanup code
 def clean_code(text: str) -> str:
-    """
-    Extracts code strictly from inside markdown fences. 
-    If no fences found, tries to clean the raw text.
-    Also removes any existing main() function to avoid conflicts.
-    """
     if not text:
         return ""
-
-    # 1. Try to find code inside ```c ... ``` or ``` ... ```
     pattern = r"```(?:c|C)?\n(.*?)```"
     match = re.search(pattern, text, re.DOTALL)
-    
     if match:
         code = match.group(1)
     else:
-        # Fallback: if no code blocks, assume the whole text is code 
-        # but strip potential markdown headers like "###"
         code = text
-        # Remove markdown headers
         code = re.sub(r"^#+ .*", "", code, flags=re.MULTILINE)
-
-    # 2. Remove any 'int main' or 'void main' functions provided by the LLM
-    # This regex looks for main functions and attempts to remove them.
-    # Note: Parsing C with regex is brittle, but usually works for LLM output.
-    # We essentially look for 'int main(...){ ... }' and remove it.
-    # A simpler approach is to tell the LLM NOT to generate main.
-    
     return code.strip()
 
 #Function that types a prompt to the gemini llm
 def llm_call(prompt: str) -> str:
-    resp = client.models.generate_content(
-        model="gemini-2.5-flash",   # or another Gemini model you have access to
-        contents=prompt
-    )   
-    return resp.text or ""
+    try:
+        resp = client.models.generate_content(
+            model="gemini-2.0-flash", 
+            contents=prompt
+        )   
+        return resp.text or ""
+    except Exception as e:
+        print(f"LLM Error: {e}")
+        return ""
 
 #Prevents the llm from being chatty
 SYSTEM_INSTRUCTIONS = """
@@ -452,36 +473,18 @@ int main() {
 """
 
 # --------- Compilation Check ---------------
-#Helper function that checks if the code compiles
 def try_compile(block_name: str, code: str):
-    """
-    Try to compile the LLM-generated block by adding a tiny harness.
-    Returns (success_bool, compiler_output_string).
-    This assumes you have gcc (MinGW-w64) on PATH.
-    """
     harness = HARNESS[block_name]
-
-    #Makes a temporary c file and executable file to test compilation
     with tempfile.TemporaryDirectory() as td:
         cpath = Path(td) / f"{block_name}.c"
         exepath = Path(td) / f"{block_name}.exe"
-
-        #Combine block + harness (main function) so compiler can test it
         full_source = PRELUDE + "\n" + code + "\n\n" + harness
         cpath.write_text(full_source, encoding="utf-8")
-
-        #Compile attempt (link common Windows libs just in case)
-        cmd = [
-            "gcc",
-            str(cpath),
-            "-o", str(exepath),
-            "-lcrypt32",
-            "-lpsapi"
-        ]
+        cmd = [CC, str(cpath), "-o", str(exepath), "-lcrypt32", "-lpsapi"]
         proc = subprocess.run(cmd, capture_output=True, text=True)
-        compiler_log = (proc.stdout or "") + (proc.stderr or "")
-        return proc.returncode == 0, compiler_log
-    
+        return proc.returncode == 0, (proc.stdout + proc.stderr)
+
+
 #Generating variants of the benign files
 def generate_variants():
     os.makedirs(BLOCKS_DIR, exist_ok=True)
@@ -582,11 +585,24 @@ def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     os.makedirs(GOOD_BLOCKS_DIR, exist_ok=True)
 
+    # 1. Generate the building blocks (The "Ingredients")
     generate_variants()
-    c_file, folder = assemble_sample()
-    compile_to_pe(c_file, folder)
 
-    print("[✔] Done.")
+    # 2. Assemble multiple unique samples (The "Meals")
+    print(f"\n[*] Assembling {NUM_SAMPLES} unique samples from the generated blocks...")
+    
+    for i in range(1, NUM_SAMPLES + 1):
+        print(f"\n--- Generating Sample {i}/{NUM_SAMPLES} ---")
+        try:
+            # Pick random blocks and combine them
+            c_file, folder = assemble_sample()
+            
+            # Compile this specific combination
+            compile_to_pe(c_file, folder)
+        except Exception as e:
+            print(f"[-] Failed to create sample {i}: {e}")
+
+    print("\n[✔] Done. Check the 'generated_samples' folder.")
 
 if __name__ == "__main__":
     main()

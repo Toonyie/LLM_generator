@@ -1,19 +1,20 @@
-#include <string.h> // Required for strlen
+#include <windows.h>
 
 void String_XOR(char *string, char *key) {
-    if (string == NULL || key == NULL) {
-        return;
+    int string_length = 0;
+    int key_length = 0;
+
+    // Calculate string length
+    while (string[string_length] != '\0') {
+        string_length++;
     }
 
-    size_t key_len = strlen(key);
-    if (key_len == 0) {
-        // Cannot XOR with an empty key.
-        return;
+    // Calculate key length
+    while (key[key_length] != '\0') {
+        key_length++;
     }
 
-    size_t i = 0;
-    while (string[i] != '\0') {
-        string[i] = string[i] ^ key[i % key_len];
-        i++;
+    for (int i = 0; i < string_length; i++) {
+        string[i] = string[i] ^ key[i % key_length];
     }
 }

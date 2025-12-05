@@ -1,34 +1,77 @@
-#include <windows.h> // For BOOL, TRUE, FALSE
-#include <string.h>  // For strcmp
+#include <windows.h>
+#include <stdio.h>
 
-// MinGW-w64 typically provides __cpuid via intrin.h for MSVC compatibility.
-// If not found, __cpuid can also be found in <x86intrin.h> or implemented via inline assembly.
-#include <intrin.h>  // For __cpuid intrinsic
+typedef struct _UNICODE_STRING {
+  USHORT Length;
+  USHORT MaximumLength;
+  PWSTR  Buffer;
+} UNICODE_STRING, *PUNICODE_STRING;
+
+typedef NTSTATUS (NTAPI *RtlNtStatusToDosError)(NTSTATUS Status);
+typedef NTSTATUS (NTAPI *NtQuerySystemInformation)(
+    UINT SystemInformationClass,
+    PVOID SystemInformation,
+    ULONG SystemInformationLength,
+    PULONG ReturnLength
+);
+
+typedef struct _SYSTEM_PROCESSOR_INFORMATION {
+    WORD  ProcessorArchitecture;
+    WORD  ProcessorLevel;
+    WORD  ProcessorRevision;
+    BYTE  Reserved;
+    DWORD  ProcessorFeatureBits;
+    DWORD  Reserved1;
+} SYSTEM_PROCESSOR_INFORMATION, *PSYSTEM_PROCESSOR_INFORMATION;
+
+typedef enum _SYSTEM_INFORMATION_CLASS {
+    SystemBasicInformation,
+    SystemProcessorInformation,
+    SystemPerformanceInformation,
+    SystemTimeOfDayInformation,
+    SystemNotImplemented1,
+    SystemProcessesAndThreadsInformation,
+    SystemCallCounts,
+    SystemConfigurationInformation,
+    SystemProcessorPerformanceInformation,
+    SystemGlobalFlagInformation,
+    SystemNotImplemented2,
+    SystemModuleInformation,
+    SystemLockInformation,
+    SystemNotImplemented3,
+    SystemCrashDumpInformation,
+    SystemExceptionInformation,
+    SystemCrashDumpStateInformation,
+    SystemQuotaInformation,
+    SystemOverloadCounterInformation,
+    SystemPplmInformation,
+} SYSTEM_INFORMATION_CLASS;
+
 
 BOOL CPU_Identification() {
-    int cpuInfo[4];   // EAX, EBX, ECX, EDX registers
-    char vendorID[13]; // "GenuineIntel\0" (12 characters + null terminator)
+    HMODULE hNtdll = GetModuleHandleW(L"ntdll.dll");
+    if (hNtdll == NULL) {
+        return FALSE;
+    }
 
-    // Call CPUID with EAX=0 to get the vendor ID string
-    // The __cpuid intrinsic stores EAX, EBX, ECX, EDX into cpuInfo[0-3] respectively.
-    __cpuid(cpuInfo, 0);
+    NtQuerySystemInformation NtQuerySystemInformationFunc = (NtQuerySystemInformation)GetProcAddress(hNtdll, "NtQuerySystemInformation");
+    if (NtQuerySystemInformationFunc == NULL) {
+        return FALSE;
+    }
 
-    // The vendor ID string is returned in EBX, EDX, ECX.
-    // Order of concatenation: EBX (bits 0-31), EDX (bits 32-63), ECX (bits 64-95).
-    // cpuInfo[1] = EBX
-    // cpuInfo[3] = EDX
-    // cpuInfo[2] = ECX
+    SYSTEM_PROCESSOR_INFORMATION processorInfo;
+    NTSTATUS status = NtQuerySystemInformationFunc(
+        SystemProcessorInformation,
+        &processorInfo,
+        sizeof(SYSTEM_PROCESSOR_INFORMATION),
+        NULL
+    );
 
-    // Copy the registers into the char array
-    // Note: Using memcpy or direct pointer assignment is typical.
-    // Ensure byte order is correct for the string.
-    *(int*)(vendorID + 0) = cpuInfo[1]; // EBX (first 4 chars)
-    *(int*)(vendorID + 4) = cpuInfo[3]; // EDX (middle 4 chars)
-    *(int*)(vendorID + 8) = cpuInfo[2]; // ECX (last 4 chars)
-    vendorID[12] = '\0'; // Null-terminate the string
-
-    // Compare the extracted vendor ID with "GenuineIntel"
-    if (strcmp(vendorID, "GenuineIntel") == 0) {
+    if (status != 0) {
+      return FALSE;
+    }
+    
+    if (processorInfo.ProcessorArchitecture == PROCESSOR_ARCHITECTURE_INTEL) {
         return TRUE;
     } else {
         return FALSE;

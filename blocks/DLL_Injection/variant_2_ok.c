@@ -1,107 +1,88 @@
 #include <windows.h>
-#include <tlhelp32.h>
-#include <string.h> // For strlen and _stricmp
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+typedef struct _UNICODE_STRING {
+    USHORT Length;
+    USHORT MaximumLength;
+    PWSTR  Buffer;
+} UNICODE_STRING, *PUNICODE_STRING;
 
 void DLL_Injection(char *dll, char *process) {
-    HANDLE hSnapshot = INVALID_HANDLE_VALUE;
-    PROCESSENTRY32 pe32;
-    DWORD dwProcessId = 0;
+    DWORD processID = 0;
     HANDLE hProcess = NULL;
-    LPVOID lpRemoteDllPath = NULL;
-    HANDLE hRemoteThread = NULL;
-    HMODULE hKernel32 = NULL;
-    FARPROC pLoadLibraryA = NULL;
-    SIZE_T dwDllPathLen = 0;
+    LPVOID LoadLibAddr = NULL;
+    LPVOID RemoteStringAddr = NULL;
+    HANDLE hThread = NULL;
 
-    // 1. Get Process ID (PID)
-    hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (hSnapshot == INVALID_HANDLE_VALUE) {
-        return;
-    }
+    // Get process ID by process name
+    PROCESSENTRY32 entry;
+    entry.dwSize = sizeof(PROCESSENTRY32);
 
-    pe32.dwSize = sizeof(PROCESSENTRY32);
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
 
-    if (!Process32First(hSnapshot, &pe32)) {
-        CloseHandle(hSnapshot);
-        return;
-    }
-
-    do {
-        // Compare process name using case-insensitive string comparison
-        if (_stricmp(pe32.szExeFile, process) == 0) {
-            dwProcessId = pe32.th32ProcessID;
-            break;
+    if (Process32First(snapshot, &entry) == TRUE) {
+        while (Process32Next(snapshot, &entry) == TRUE) {
+            if (strcmp(entry.szExeFile, process) == 0) {
+                processID = entry.th32ProcessID;
+                break;
+            }
         }
-    } while (Process32Next(hSnapshot, &pe32));
+    }
 
-    CloseHandle(hSnapshot); // Always close the snapshot handle
+    CloseHandle(snapshot);
 
-    if (dwProcessId == 0) {
-        // Process not found
+    if (processID == 0) {
+        fprintf(stderr, "Process not found!\n");
         return;
     }
 
-    // 2. Open Process with necessary permissions
-    // PROCESS_CREATE_THREAD: Required to create a new thread in the process.
-    // PROCESS_QUERY_INFORMATION: Required to retrieve certain information about the process.
-    // PROCESS_VM_OPERATION: Required to perform operations on the address space of the process (e.g., VirtualAllocEx).
-    // PROCESS_VM_WRITE: Required to write to memory in the process (e.g., WriteProcessMemory).
-    hProcess = OpenProcess(PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION | PROCESS_VM_WRITE,
-                           FALSE, dwProcessId);
+    // Open the process
+    hProcess = OpenProcess(PROCESS_ALL_ACCESS, FALSE, processID);
     if (hProcess == NULL) {
+        fprintf(stderr, "OpenProcess failed: %d\n", GetLastError());
         return;
     }
 
-    // 3. Allocate memory in the target process for the DLL path
-    dwDllPathLen = (strlen(dll) + 1) * sizeof(char); // +1 for null terminator
-    lpRemoteDllPath = VirtualAllocEx(hProcess, NULL, dwDllPathLen, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-    if (lpRemoteDllPath == NULL) {
+    // Get the address of LoadLibraryA
+    LoadLibAddr = GetProcAddress(GetModuleHandleA("kernel32.dll"), "LoadLibraryA");
+    if (LoadLibAddr == NULL) {
+        fprintf(stderr, "GetProcAddress(LoadLibraryA) failed: %d\n", GetLastError());
         CloseHandle(hProcess);
         return;
     }
 
-    // 4. Write DLL path into the allocated memory
-    if (!WriteProcessMemory(hProcess, lpRemoteDllPath, dll, dwDllPathLen, NULL)) {
-        VirtualFreeEx(hProcess, lpRemoteDllPath, 0, MEM_RELEASE);
+    // Allocate memory in the remote process for the DLL path
+    RemoteStringAddr = VirtualAllocEx(hProcess, NULL, strlen(dll) + 1, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if (RemoteStringAddr == NULL) {
+        fprintf(stderr, "VirtualAllocEx failed: %d\n", GetLastError());
         CloseHandle(hProcess);
         return;
     }
 
-    // 5. Get the address of LoadLibraryA from kernel32.dll
-    // GetModuleHandleA does not require a corresponding CloseHandle.
-    hKernel32 = GetModuleHandleA("kernel32.dll");
-    if (hKernel32 == NULL) {
-        VirtualFreeEx(hProcess, lpRemoteDllPath, 0, MEM_RELEASE);
+    // Write the DLL path to the allocated memory
+    if (!WriteProcessMemory(hProcess, RemoteStringAddr, dll, strlen(dll) + 1, NULL)) {
+        fprintf(stderr, "WriteProcessMemory failed: %d\n", GetLastError());
+        VirtualFreeEx(hProcess, RemoteStringAddr, 0, MEM_RELEASE);
         CloseHandle(hProcess);
         return;
     }
 
-    pLoadLibraryA = GetProcAddress(hKernel32, "LoadLibraryA");
-    if (pLoadLibraryA == NULL) {
-        VirtualFreeEx(hProcess, lpRemoteDllPath, 0, MEM_RELEASE);
+    // Create a remote thread to call LoadLibraryA with the DLL path
+    hThread = CreateRemoteThread(hProcess, NULL, 0, (LPTHREAD_START_ROUTINE)LoadLibAddr, RemoteStringAddr, 0, NULL);
+    if (hThread == NULL) {
+        fprintf(stderr, "CreateRemoteThread failed: %d\n", GetLastError());
+        VirtualFreeEx(hProcess, RemoteStringAddr, 0, MEM_RELEASE);
         CloseHandle(hProcess);
         return;
     }
 
-    // 6. Create a remote thread in the target process to call LoadLibraryA
-    hRemoteThread = CreateRemoteThread(hProcess,
-                                       NULL,           // Default security attributes
-                                       0,              // Default stack size
-                                       (LPTHREAD_START_ROUTINE)pLoadLibraryA, // Start routine is LoadLibraryA
-                                       lpRemoteDllPath, // Argument is the remote address of the DLL path
-                                       0,              // Creation flags (run immediately)
-                                       NULL);          // No thread ID needed
-    if (hRemoteThread == NULL) {
-        VirtualFreeEx(hProcess, lpRemoteDllPath, 0, MEM_RELEASE);
-        CloseHandle(hProcess);
-        return;
-    }
+    // Wait for the thread to finish
+    WaitForSingleObject(hThread, INFINITE);
 
-    // 7. Wait for the remote thread to complete (optional, but ensures DLL is loaded)
-    WaitForSingleObject(hRemoteThread, INFINITE);
-
-    // Clean up resources
-    CloseHandle(hRemoteThread); // Close the handle to the remote thread
-    VirtualFreeEx(hProcess, lpRemoteDllPath, 0, MEM_RELEASE); // Free memory in target process
-    CloseHandle(hProcess); // Close the handle to the target process
+    // Clean up
+    CloseHandle(hThread);
+    VirtualFreeEx(hProcess, RemoteStringAddr, 0, MEM_RELEASE);
+    CloseHandle(hProcess);
 }

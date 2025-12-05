@@ -1,50 +1,52 @@
 #include <windows.h>
-#include <limits.h>
 
-int Load_From_File(void *file, void *buffer) {
-    HANDLE hFile = (HANDLE)file;
-    LARGE_INTEGER fileSize;
-    DWORD bytesRead = 0;
-    BOOL success;
+typedef struct _UNICODE_STRING {
+  USHORT Length;
+  USHORT MaximumLength;
+  PWSTR  Buffer;
+} UNICODE_STRING, *PUNICODE_STRING;
 
-    if (hFile == INVALID_HANDLE_VALUE || hFile == NULL || buffer == NULL) {
-        SetLastError(ERROR_INVALID_PARAMETER);
-        return -1;
-    }
+int Load_From_File(void *file_name, void *buffer) {
+  HANDLE hFile = INVALID_HANDLE_VALUE;
+  DWORD fileSize = 0;
+  DWORD bytesRead = 0;
 
-    if (!GetFileSizeEx(hFile, &fileSize)) {
-        return -1;
-    }
+  // Ensure inputs are not NULL
+  if (file_name == NULL || buffer == NULL) {
+    return -1; // Indicate error
+  }
 
-    // Check if the file size exceeds the maximum value representable by 'int'.
-    // If it does, the return type 'int' cannot accurately represent the size.
-    // In such cases, this function returns -1 to indicate a size limitation error,
-    // as per the constraints of the 'int' return type.
-    if (fileSize.QuadPart > INT_MAX) {
-        SetLastError(ERROR_FILE_TOO_LARGE); // Indicate file size exceeds int capacity
-        return -1;
-    }
+  // Convert file_name to wide string if needed
+  wchar_t wFileName[MAX_PATH];
+  MultiByteToWideChar(CP_UTF8, 0, (char*)file_name, -1, wFileName, MAX_PATH);
 
-    // The number of bytes to read should now fit within a DWORD, and also within INT_MAX.
-    DWORD bytesToRead = (DWORD)fileSize.QuadPart;
 
-    success = ReadFile(
-        hFile,           // handle to file
-        buffer,          // data buffer
-        bytesToRead,     // number of bytes to read
-        &bytesRead,      // number of bytes read
-        NULL             // no overlapped structure
-    );
+  hFile = CreateFileW(wFileName, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+  if (hFile == INVALID_HANDLE_VALUE) {
+    return -2; // Indicate file open error
+  }
 
-    if (!success) {
-        return -1;
-    }
+  fileSize = GetFileSize(hFile, NULL);
+  if (fileSize == INVALID_FILE_SIZE) {
+    CloseHandle(hFile);
+    return -3; // Indicate file size error
+  }
 
-    // This check is mostly defensive; it should not trigger if fileSize.QuadPart <= INT_MAX check passed.
-    if (bytesRead > INT_MAX) {
-        SetLastError(ERROR_INTERNAL_ERROR); // Unexpected state
-        return -1;
-    }
+  if (fileSize == 0) {
+    CloseHandle(hFile);
+    return 0; //Empty file
+  }
 
-    return (int)bytesRead;
+  if (!ReadFile(hFile, buffer, fileSize, &bytesRead, NULL)) {
+    CloseHandle(hFile);
+    return -4; // Indicate read error
+  }
+
+  CloseHandle(hFile);
+
+  if (bytesRead != fileSize) {
+    return -5; //Indicate that not all file bytes were read
+  }
+
+  return (int)fileSize;
 }

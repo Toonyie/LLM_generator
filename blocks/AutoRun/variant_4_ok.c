@@ -1,46 +1,34 @@
 #include <windows.h>
+#include <stdio.h>
+
+typedef struct _UNICODE_STRING {
+    USHORT Length;
+    USHORT MaximumLength;
+    PWSTR  Buffer;
+} UNICODE_STRING, *PUNICODE_STRING;
 
 void AutoRun() {
     HKEY hKey;
-    LPCWSTR subkey = L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run";
-    LPCWSTR valueName = L"MyApplicationAutoRun"; // Unique name for your application
+    LONG result;
+    wchar_t exePath[MAX_PATH];
+    DWORD pathLength = MAX_PATH;
 
-    WCHAR currentExePath[MAX_PATH];
-    DWORD pathLength = GetModuleFileNameW(NULL, currentExePath, MAX_PATH);
-
-    if (pathLength == 0 || pathLength >= MAX_PATH) {
-        // Failed to get executable path or path too long
-        return;
+    if (GetModuleFileNameW(NULL, exePath, MAX_PATH) == 0) {
+        return; // Failed to get executable path
     }
 
-    LONG lResult = RegCreateKeyExW(
-        HKEY_CURRENT_USER,
-        subkey,
-        0,
-        NULL,
-        REG_OPTION_NON_VOLATILE,
-        KEY_SET_VALUE,
-        NULL,
-        &hKey,
-        NULL
-    );
+    result = RegOpenKeyExW(HKEY_CURRENT_USER, L"Software\\Microsoft\\Windows\\CurrentVersion\\Run", 0, KEY_ALL_ACCESS, &hKey);
+    if (result == ERROR_SUCCESS) {
+        result = RegSetValueExW(hKey, L"MyApplication", 0, REG_SZ, (const BYTE*)exePath, (wcslen(exePath) + 1) * sizeof(wchar_t));
 
-    if (lResult != ERROR_SUCCESS) {
-        // Failed to open or create registry key
-        return;
+        if (result != ERROR_SUCCESS) {
+            // Handle error setting value (e.g., print error code to console)
+            printf("Error setting registry value: %ld\n", result);
+        }
+
+        RegCloseKey(hKey);
+    } else {
+        // Handle error opening key (e.g., print error code to console)
+        printf("Error opening registry key: %ld\n", result);
     }
-
-    lResult = RegSetValueExW(
-        hKey,
-        valueName,
-        0,
-        REG_SZ,
-        (LPBYTE)currentExePath,
-        (wcslen(currentExePath) + 1) * sizeof(WCHAR)
-    );
-
-    RegCloseKey(hKey);
-
-    // In a real application, you might check 'lResult' here
-    // to determine if RegSetValueExW was successful.
 }

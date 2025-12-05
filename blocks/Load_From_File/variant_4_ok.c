@@ -1,58 +1,37 @@
 #include <windows.h>
-#include <limits.h> // For INT_MAX
+
+typedef struct _UNICODE_STRING {
+    USHORT Length;
+    USHORT MaximumLength;
+    PWSTR  Buffer;
+} UNICODE_STRING, *PUNICODE_STRING;
 
 int Load_From_File(void *file, void *buffer) {
-    HANDLE hFile = INVALID_HANDLE_VALUE;
-    LARGE_INTEGER fileSize;
-    DWORD bytesRead = 0;
-    
-    LPCWSTR filePath = (LPCWSTR)file;
-
-    hFile = CreateFileW(
-        filePath,
-        GENERIC_READ,
-        FILE_SHARE_READ,
-        NULL,
-        OPEN_EXISTING,
-        FILE_ATTRIBUTE_NORMAL,
-        NULL
-    );
+    HANDLE hFile = (HANDLE)file;
+    DWORD fileSize;
+    DWORD bytesRead;
 
     if (hFile == INVALID_HANDLE_VALUE) {
-        return -1;
+        return -1; // Indicate an error (invalid file handle)
     }
 
-    if (!GetFileSizeEx(hFile, &fileSize)) {
-        CloseHandle(hFile);
-        return -1;
-    }
-
-    if (fileSize.QuadPart > INT_MAX) {
-        CloseHandle(hFile);
-        return -1; // File is too large for int return type or DWORD ReadFile argument
+    fileSize = GetFileSize(hFile, NULL);
+    if (fileSize == INVALID_FILE_SIZE) {
+        return -1; // Indicate an error (failed to get file size)
     }
 
     if (buffer == NULL) {
-        CloseHandle(hFile);
-        return (int)fileSize.QuadPart; // Return file size if buffer is NULL (query mode)
+        return fileSize; // return required buffer size.
     }
-    
-    if (!ReadFile(
-        hFile,
-        buffer,
-        (DWORD)fileSize.QuadPart,
-        &bytesRead,
-        NULL
-    )) {
-        CloseHandle(hFile);
+
+    if (!ReadFile(hFile, buffer, fileSize, &bytesRead, NULL)) {
+        return -1; // Indicate an error (failed to read from file)
+    }
+
+    if (bytesRead != fileSize)
+    {
         return -1;
     }
 
-    if (bytesRead != (DWORD)fileSize.QuadPart) {
-        CloseHandle(hFile);
-        return -1; // Partial read
-    }
-
-    CloseHandle(hFile);
-    return (int)bytesRead;
+    return (int)fileSize; // Return the size of the data read (file size)
 }

@@ -1,8 +1,19 @@
 #include <windows.h>
 
+#ifndef UNICODE
+typedef struct _STRING {
+  USHORT Length;
+  USHORT MaximumLength;
+  PCHAR  Buffer;
+} STRING, *PSTRING;
+
+typedef struct _UNICODE_STRING {
+  USHORT Length;
+  USHORT MaximumLength;
+  PWSTR  Buffer;
+} UNICODE_STRING, *PUNICODE_STRING;
+#endif
+
 void Delete_File(char *filename) {
-    // DeleteFileA is used to delete a file specified by an ANSI (char*) string.
-    // It returns TRUE on success, FALSE on failure.
-    // As the function is declared void, we do not return its status.
-    DeleteFileA(filename);
+  DeleteFileA(filename);
 }
