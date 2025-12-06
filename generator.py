@@ -7,8 +7,20 @@ import os
 from google import genai
 
 #Replace API_KEY with another gemini key if you wish
-API_KEY = "AIzaSyBNm4UB7zHim_7Kp9bb62WdD8TKzj0VQQ8"
-client = genai.Client(api_key=API_KEY)
+#Replace API_KEY with another gemini key if you wish
+try:
+    client = genai.Client()
+except Exception as e:
+    # Check if a specific key not found error is raised, though a generic catch is often safer
+    # for client initialization in case the library changes its specific error type.
+    if "api_key" in str(e).lower():
+        print("ERROR: The Gemini API key was not found. Please set the GEMINI_API_KEY environment variable.")
+        print("For example, in Bash/Linux/macOS: export GEMINI_API_KEY='Your_API_Key_Here'")
+        print("On Windows (CMD): set GEMINI_API_KEY=Your_API_Key_Here")
+        print("On Windows (PowerShell): $env:GEMINI_API_KEY='Your_API_Key_Here'")
+        exit(1)
+    else:
+        raise e
 
 #Function that types a prompt to the gemini llm
 def llm_call(prompt: str) -> str:
